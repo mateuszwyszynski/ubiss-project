@@ -1,4 +1,4 @@
-//#include "Freenove_IR_Lib_for_ESP32.h"
+
 #define LED_PIN 2
 #include <IRremote.h> // Library for handling IR signals
 
@@ -30,25 +30,24 @@ int parseCommand() {
   
   switch (IrReceiver.decodedIRData.decodedRawData)
   {
-    case 0x123456:
+    case 0xB946FF00:
     { 
       Serial.println("Forward");
-      last_movement_command = FORWARD;
-      break;
+      return FORWARD;
     }
-    case 0x123457:
+    case 0xEA15FF00:
     { 
       Serial.println("Bacward");
       return BACWARD;
       break;
     }
-    case 0x123458:
+    case 0xBB44FF00:
     { 
       Serial.println("Turn left");
       return TURN_LEFT;
       break;
     }
-    case 0x123459:
+    case 0xBC43FF00:
     { 
       Serial.println("Turn right");
       return TURN_RIGHT;
@@ -68,7 +67,8 @@ void loop() {
   // bool value = 
   if (IrReceiver.decode()) {
     // Print the received data in Hexadecimal
-    Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
+    parseCommand();
+    //Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
     IrReceiver.resume(); // Enable receiving of the next value
 
     // last_movement_command = parseCommand()
