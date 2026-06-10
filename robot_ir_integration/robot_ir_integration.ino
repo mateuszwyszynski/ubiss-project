@@ -12,8 +12,8 @@ int last_movement_command = NO_COMMAND;
 
 #define MOTOR_IN1 2
 #define MOTOR_IN2 4
-#define MOTOR_IN3 4
-#define MOTOR_IN4 4
+#define MOTOR_IN3 14
+#define MOTOR_IN4 12
 
 // PWM motor pin
 #define ENA 5
@@ -23,21 +23,13 @@ void setup() {
   // put your setup code here, to run once:
   pinMode(MOTOR_IN1, OUTPUT);
   pinMode(MOTOR_IN2, OUTPUT);
+   pinMode(MOTOR_IN3, OUTPUT);
+  pinMode(MOTOR_IN4, OUTPUT);
 
-  IrReceiver.begin(RECV_PIN, ENABLE_LED_FEEDBACK); // Start the receiver
+  IrReceiver.begin(IR_RECV_PIN, ENABLE_LED_FEEDBACK); // Start the receiver
 
-  pinMode(ledPin, OUTPUT);
-}
-
-void receiveCommand()
-{
-  if (IrReceiver.decode()) {
-    // Print the received data in Hexadecimal
-    int command = parseCommand();
-    //Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
-    IrReceiver.resume();
-
-    return command;
+  pinMode(ENA, OUTPUT);
+  pinMode(ENB, OUTPUT);
 }
 
 int parseCommand() {
@@ -78,6 +70,20 @@ int parseCommand() {
   }
 }
 
+int receiveCommand()
+{
+  if (IrReceiver.decode()) {
+    // Print the received data in Hexadecimal
+    int command = parseCommand();
+    //Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
+    IrReceiver.resume();
+
+    return command;
+  }
+
+  return NO_COMMAND;
+}
+
 void move(int speedA, int speedB)
 {
   if (speedA > 0)
@@ -109,28 +115,28 @@ void move(int speedA, int speedB)
 
 void loop() {
 
-  int command = receiveCommand():
+  int command = receiveCommand();
 
-  switch (recieveCommand())
+  switch (command)
   {
     case FORWARD:
     {
-      move(200, 200);
+      move(255, 255);
       break;
     }
     case BACWARD:
     {
-      move(-200, -200);
+      move(-255, -255);
       break;
     }
     case TURN_LEFT:
     {
-      move(-200, 200);
+      move(-255, 255);
       break;
     }
     case TURN_RIGHT:
     {
-      move(200, -200);
+      move(255, -255);
       break;
     }
   }
