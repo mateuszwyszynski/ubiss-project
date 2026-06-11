@@ -1,5 +1,5 @@
-int MOTOR_PIN_1 = 2;
-int MOTOR_PIN_2 = 4;
+int MOTOR_PIN_1 = 33;
+int MOTOR_PIN_2 = 32;
 
 // PWM motor pin
 const int ledPin = 5;

@@ -1,35 +1,48 @@
 #include <IRremote.h> // Library for handling IR signals
 
 #define IR_RECV_PIN 15
+#define LED_PIN 2
 // Movement command enums
 const int NO_COMMAND = 0;
 const int FORWARD = 1;
 const int BACWARD = 2;
 const int TURN_LEFT = 3;
 const int TURN_RIGHT = 4;
+const int STEER_RIGHT = 6;
+const int STEER_LEFT = 7;
+const int STOP = 8;
+
+
+const int FULLSPEED = 200;
+const int TURNSPEED = 50;
 
 int last_movement_command = NO_COMMAND;
 
-#define MOTOR_IN1 2
-#define MOTOR_IN2 4
-#define MOTOR_IN3 14
-#define MOTOR_IN4 12
+#define MOTOR_IN1 12
+#define MOTOR_IN2 14
+#define MOTOR_IN3 32
+#define MOTOR_IN4 33
 
 // PWM motor pin
-#define ENA 5
-#define ENB 6// TODO: Check pin
+#define ENA 25
+#define ENB 5// TODO: Check pin
 
 void setup() {
   // put your setup code here, to run once:
+  Serial.begin(115200);
   pinMode(MOTOR_IN1, OUTPUT);
   pinMode(MOTOR_IN2, OUTPUT);
-   pinMode(MOTOR_IN3, OUTPUT);
+  pinMode(MOTOR_IN3, OUTPUT);
   pinMode(MOTOR_IN4, OUTPUT);
+
+  pinMode(LED_PIN, OUTPUT);
 
   IrReceiver.begin(IR_RECV_PIN, ENABLE_LED_FEEDBACK); // Start the receiver
 
   pinMode(ENA, OUTPUT);
   pinMode(ENB, OUTPUT);
+
+  Serial.println("Setup done!");
 }
 
 int parseCommand() {
@@ -62,12 +75,33 @@ int parseCommand() {
       return TURN_RIGHT;
       break;
     }
+    case 0xBF40FF00:
+    {
+      Serial.println("Turn right");
+      return STOP;
+      break;
+    }
+    case 0xBA45FF00:
+    {
+      Serial.println("Turn left");
+      return STEER_LEFT;
+      break;
+    }
+    case 0xB847FF00:
+    {
+      Serial.println("Steer right");
+      return STEER_RIGHT;
+      break;
+    }
+    
     default:
     {
       Serial.println("Unregistered button");
+      Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
       return NO_COMMAND;
     }
   }
+  return NO_COMMAND;
 }
 
 int receiveCommand()
@@ -109,36 +143,53 @@ void move(int speedA, int speedB)
   }
 
 
-  analogWrite(ENA, speedA);
-  analogWrite(ENB, speedB);
+  analogWrite(ENA, abs(speedA));
+  analogWrite(ENB, abs(speedB));
 }
 
 void loop() {
 
+  digitalWrite(LED_PIN,  (millis() >> 8 ) &1);
   int command = receiveCommand();
 
   switch (command)
   {
     case FORWARD:
     {
-      move(255, 255);
+      move(FULLSPEED, FULLSPEED);
       break;
     }
     case BACWARD:
     {
-      move(-255, -255);
+      move(-FULLSPEED, -FULLSPEED);
       break;
     }
     case TURN_LEFT:
     {
-      move(-255, 255);
+      move(-FULLSPEED/2, FULLSPEED/2);
       break;
     }
     case TURN_RIGHT:
     {
-      move(255, -255);
+      move(FULLSPEED/2, -FULLSPEED/2);
+      break;
+    }
+    case STOP:
+    {
+      move(0, 0);
+      break;
+    }
+    case STEER_RIGHT:
+    {
+      move(FULLSPEED, FULLSPEED - TURNSPEED);
+      break;
+    }
+    case STEER_LEFT:
+    {
+      move(FULLSPEED - TURNSPEED, FULLSPEED);
       break;
     }
   }
-  
+
+  delay(10);
 }
