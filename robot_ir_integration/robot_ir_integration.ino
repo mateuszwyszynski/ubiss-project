@@ -1,4 +1,20 @@
 #include <IRremote.h> // Library for handling IR signals
+#include <Keypad.h>
+
+const byte ROWS = 4;
+const byte COLS = 4;
+ 
+char keys[ROWS][COLS] = {
+  {'1','2','3','A'},
+  {'4','5','6','B'},
+  {'7','8','9','C'},
+  {'*','0','#','D'}
+};
+ 
+byte rowPins[ROWS] = {13, 12, 14, 27}; // Connect to R1-R4
+byte colPins[COLS] = {26, 25, 33, 32}; // Connect to C1-C4
+ 
+Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
 
 #define VIBRATION_SENSOR_PIN 18
 volatile bool vibrationDetected = false;
@@ -25,8 +41,8 @@ const int TURNSPEED = 50;
 
 int last_movement_command = NO_COMMAND;
 
-#define MOTOR_IN1 13
-#define MOTOR_IN2 12
+#define MOTOR_IN1 4
+#define MOTOR_IN2 22
 #define MOTOR_IN3 21
 #define MOTOR_IN4 19
 
@@ -72,6 +88,7 @@ int parseCommand() {
   {
     return last_movement_command;
   }
+
   switch (IrReceiver.decodedIRData.decodedRawData)
   {
     case 0xB946FF00:
@@ -181,6 +198,13 @@ void loop() {
     delay(10);
 
     vibrationDetected = false;
+  }
+
+  char key = keypad.getKey();
+
+  if (key) {
+    Serial.print("Key Pressed: ");
+    Serial.println(key);
   }
 
 
