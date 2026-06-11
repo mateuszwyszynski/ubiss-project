@@ -1,5 +1,5 @@
 // Define the vibration sensor pin (matches the wiring diagram)
-const int SENSOR_PIN = 14;
+const int SENSOR_PIN = 18;
 
 // Variables for vibration detection and debouncing
 volatile bool vibrationDetected = false;

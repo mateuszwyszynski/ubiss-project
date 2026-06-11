@@ -1,5 +1,12 @@
 #include <IRremote.h> // Library for handling IR signals
 
+#define VIBRATION_SENSOR_PIN 18
+volatile bool vibrationDetected = false;
+unsigned long lastTriggerTime = 0;
+const unsigned long DEBOUNCE_DELAY = 250;
+
+
+
 #define IR_RECV_PIN 15
 #define LED_PIN 2
 // Movement command enums
@@ -18,14 +25,23 @@ const int TURNSPEED = 50;
 
 int last_movement_command = NO_COMMAND;
 
-#define MOTOR_IN1 12
-#define MOTOR_IN2 14
-#define MOTOR_IN3 32
-#define MOTOR_IN4 33
+#define MOTOR_IN1 13
+#define MOTOR_IN2 12
+#define MOTOR_IN3 21
+#define MOTOR_IN4 19
 
 // PWM motor pin
-#define ENA 25
+#define ENA 23
 #define ENB 5// TODO: Check pin
+void IRAM_ATTR sensorISR(){
+  unsigned long currentTime = millis();
+
+  if (currentTime - lastTriggerTime > DEBOUNCE_DELAY)
+  {
+    vibrationDetected = true;
+    lastTriggerTime = currentTime;
+  }
+}
 
 void setup() {
   // put your setup code here, to run once:
@@ -42,8 +58,14 @@ void setup() {
   pinMode(ENA, OUTPUT);
   pinMode(ENB, OUTPUT);
 
+  pinMode(VIBRATION_SENSOR_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(VIBRATION_SENSOR_PIN), sensorISR, FALLING);
+
   Serial.println("Setup done!");
 }
+
+// Interrupt Service Routine to detect when vibration happens
+
 
 int parseCommand() {
   if (IrReceiver.decodedIRData.flags)
@@ -122,24 +144,24 @@ void move(int speedA, int speedB)
 {
   if (speedA > 0)
   {
-    digitalWrite(MOTOR_IN1, LOW);
-    digitalWrite(MOTOR_IN2, HIGH);
+    digitalWrite(MOTOR_IN2, LOW);
+    digitalWrite(MOTOR_IN1, HIGH);
   }
   else
   {
-    digitalWrite(MOTOR_IN1, HIGH);
-    digitalWrite(MOTOR_IN2, LOW);
+    digitalWrite(MOTOR_IN2, HIGH);
+    digitalWrite(MOTOR_IN1, LOW);
   }
   
   if (speedB > 0)
   {
-    digitalWrite(MOTOR_IN3, LOW);
-    digitalWrite(MOTOR_IN4, HIGH);
+    digitalWrite(MOTOR_IN4, LOW);
+    digitalWrite(MOTOR_IN3, HIGH);
   }
   else
   {
-    digitalWrite(MOTOR_IN3, HIGH);
-    digitalWrite(MOTOR_IN4, LOW);
+    digitalWrite(MOTOR_IN4, HIGH);
+    digitalWrite(MOTOR_IN3, LOW);
   }
 
 
@@ -149,7 +171,19 @@ void move(int speedA, int speedB)
 
 void loop() {
 
-  digitalWrite(LED_PIN,  (millis() >> 8 ) &1);
+  //digitalWrite(LED_PIN,  (millis() >> 8 ) &1);
+
+  if(vibrationDetected) {
+    Serial.println("Vibration detected");
+    digitalWrite(LED_PIN, true);
+    delay(50);
+    digitalWrite(LED_PIN, false);
+    delay(10);
+
+    vibrationDetected = false;
+  }
+
+
   int command = receiveCommand();
 
   switch (command)
@@ -166,12 +200,12 @@ void loop() {
     }
     case TURN_LEFT:
     {
-      move(-FULLSPEED/2, FULLSPEED/2);
+      move(FULLSPEED/2, -FULLSPEED/2);
       break;
     }
     case TURN_RIGHT:
     {
-      move(FULLSPEED/2, -FULLSPEED/2);
+      move(-FULLSPEED/2, FULLSPEED/2);
       break;
     }
     case STOP:
@@ -181,12 +215,12 @@ void loop() {
     }
     case STEER_RIGHT:
     {
-      move(FULLSPEED, FULLSPEED - TURNSPEED);
+      move(FULLSPEED - TURNSPEED, FULLSPEED );
       break;
     }
     case STEER_LEFT:
     {
-      move(FULLSPEED - TURNSPEED, FULLSPEED);
+      move(FULLSPEED , FULLSPEED - TURNSPEED);
       break;
     }
   }
