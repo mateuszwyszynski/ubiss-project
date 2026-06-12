@@ -1,6 +1,13 @@
 #include <IRremote.h> // Library for handling IR signals
 #include <Keypad.h>
 
+#define sgn(x) ((x) < 0 ? -1 : ((x) > 0 ? 1 : 0)) // From: https://forum.arduino.cc/t/sgn-sign-signum-function-suggestions/602445
+
+struct MovementCommand{
+  int MotorA; // from 0 - 100 %
+  int MotorB; // from 0 - 100 %
+};
+
 const byte ROWS = 4;
 const byte COLS = 4;
  
@@ -15,6 +22,9 @@ byte rowPins[ROWS] = {13, 12, 14, 27}; // Connect to R1-R4
 byte colPins[COLS] = {26, 25, 33, 32}; // Connect to C1-C4
  
 Keypad keypad = Keypad(makeKeymap(keys), rowPins, colPins, ROWS, COLS);
+char charBuffer[11] = "";
+int charIndex = 0;
+unsigned long character_inputted = 0;
 
 #define VIBRATION_SENSOR_PIN 18
 volatile bool vibrationDetected = false;
@@ -34,12 +44,41 @@ const int TURN_RIGHT = 4;
 const int STEER_RIGHT = 6;
 const int STEER_LEFT = 7;
 const int STOP = 8;
+const int SCARE = 9;
 
 
-const int FULLSPEED = 200;
-const int TURNSPEED = 50;
+
+const float SCARED_MODIFIER = 0.7;
+const int MAXSPEED = 200;
+const int MINSPEED = 100;
+const int TURNSPEED = 20;
+const int MA_OFFSET = 0;
+const int MB_OFFSET = 30;
+
+int vibration_count = 0;
+
+MovementCommand FORWARD_COMMAND{100, 100};
+MovementCommand BACKWARD_COMMAND{-100, -100};
+MovementCommand TURN_RIGHT_COMMAND{-100/2, 100/2};
+MovementCommand TURN_LEFT_COMMAND{100/2, -100/2};
+MovementCommand STEER_RIGHT_COMMAND{100 - TURNSPEED, 100 };
+MovementCommand STEER_LEFT_COMMAND{100, 100 - TURNSPEED};
+MovementCommand STOP_COMMAND{0, 0};
+
+//float FREQUENCY = 0.008;
+float FREQUENCY = 0.008;
+int AMPLITUDE = 60;
+
+bool scared = false;
+bool robotMoving = false;
+
 
 int last_movement_command = NO_COMMAND;
+
+unsigned int scared_start = 0;
+int scared_timeout = 10 * 1000;
+
+MovementCommand lastRawCommand{0, 0};
 
 #define MOTOR_IN1 4
 #define MOTOR_IN2 22
@@ -84,6 +123,7 @@ void setup() {
 
 
 int parseCommand() {
+  
   if (IrReceiver.decodedIRData.flags)
   {
     return last_movement_command;
@@ -116,7 +156,7 @@ int parseCommand() {
     }
     case 0xBF40FF00:
     {
-      Serial.println("Turn right");
+      Serial.println("Stop");
       return STOP;
       break;
     }
@@ -132,11 +172,21 @@ int parseCommand() {
       return STEER_RIGHT;
       break;
     }
+    case 0xB54AFF00:
+    {
+      Serial.println("Scared");
+      return SCARE;
+      break;
+    }
+
     
     default:
     {
+      int command = IrReceiver.decodedIRData.decodedRawData;
+      if (command == 0)
+        return NO_COMMAND;
       Serial.println("Unregistered button");
-      Serial.println(IrReceiver.decodedIRData.decodedRawData, HEX);
+      Serial.println(command, HEX);
       return NO_COMMAND;
     }
   }
@@ -156,9 +206,65 @@ int receiveCommand()
 
   return NO_COMMAND;
 }
-
-void move(int speedA, int speedB)
+void performCommand(int command)
 {
+  MovementCommand mov_command = {0,0};
+  switch (command)
+  {
+    case FORWARD:
+    {
+      mov_command = FORWARD_COMMAND;
+      break;
+    }
+    case BACWARD:
+    {
+      mov_command = BACKWARD_COMMAND;
+      break;
+    }
+    case TURN_LEFT:
+    {
+      mov_command = TURN_LEFT_COMMAND;
+      break;
+    }
+    case TURN_RIGHT:
+    {
+      mov_command = TURN_RIGHT_COMMAND;
+      break;
+    }
+    case STOP:
+    {
+      mov_command = STOP_COMMAND;
+      break;
+    }
+    case STEER_RIGHT:
+    {
+      mov_command = STEER_RIGHT_COMMAND;
+      break;
+    }
+    case STEER_LEFT:
+    {
+      mov_command = STEER_LEFT_COMMAND;
+      break;
+    }
+    case SCARE:
+    {
+      scare();
+    }
+    default:
+      return;
+  }
+  move(mov_command, true);
+}
+
+void move(MovementCommand command, bool updateLastCommand)
+{
+  if (updateLastCommand)
+  {
+    lastRawCommand = command;
+  }
+  int speedA = command.MotorA;
+  int speedB = command.MotorB;
+
   if (speedA > 0)
   {
     digitalWrite(MOTOR_IN2, LOW);
@@ -180,74 +286,175 @@ void move(int speedA, int speedB)
     digitalWrite(MOTOR_IN4, HIGH);
     digitalWrite(MOTOR_IN3, LOW);
   }
+  int commandA = abs(speedA);
+  int commandB = abs(speedB);
+  if (speedA == 0 && speedB == 0)
+  {
+    Serial.println("Zero velocity command");
+    robotMoving = false;
+    analogWrite(ENA, 0);
+    analogWrite(ENB, 0);
+
+    // Serial.print("PWM_A:");
+    // Serial.println(0);
+
+    // Serial.print("PWM_B:");
+    // Serial.println(0);
+    return;
+  }
+  else
+  {
+    robotMoving = true;
+  }
+  constrain(commandA, 0, 100);
+  constrain(commandB, 0, 100);
+  
+  int pwmA = map(commandA, 0, 100, MINSPEED, MAXSPEED);
+  int pwmB = map(commandB, 0, 100, MINSPEED, MAXSPEED);
+
+  pwmA -= MA_OFFSET;
+  pwmB -= MB_OFFSET;
 
 
-  analogWrite(ENA, abs(speedA));
-  analogWrite(ENB, abs(speedB));
+  // Serial.print("PWM: (");
+  // Serial.print(pwmA);
+  // Serial.print(",");
+  // Serial.print(pwmB);
+  // Serial.println(")");
+  // Serial.println(scared);
+  analogWrite(ENA, pwmA);
+  analogWrite(ENB, pwmB);
+
+
+
 }
 
+void scare()
+{
+  scared = true;
+  scared_start = millis();
+  move(lastRawCommand, true);
+}
+
+void unscare()
+{
+  scared = false;
+  scared_start = 0;
+  vibration_count = 0;
+
+  move(STOP_COMMAND, true);
+}
+MovementCommand stagger()
+{
+  if (lastRawCommand.MotorA == 0 and lastRawCommand.MotorB == 0)
+    return STOP_COMMAND;
+  // Serial.print("Raw command: (");
+  // Serial.print(lastRawCommand.MotorA);
+  // Serial.print(",");
+  // Serial.print(lastRawCommand.MotorB);
+  // Serial.print(") ");
+
+  float time = millis() * FREQUENCY;
+  int sway = sin(time) * AMPLITUDE;
+  float slowDown = 0.2;
+
+  MovementCommand staggerCommand = {lastRawCommand.MotorA, lastRawCommand.MotorB};
+
+  // Scale speed down
+  staggerCommand.MotorA = int(staggerCommand.MotorA * slowDown );
+  staggerCommand.MotorB = int(staggerCommand.MotorB * slowDown );
+
+  // Serial.print("Speed: (");
+  // Serial.print(staggerCommand.MotorA);
+  // Serial.print(",");
+  // Serial.print(staggerCommand.MotorB);
+  // Serial.print(") ");
+
+
+  // Add sway
+  staggerCommand.MotorA = constrain(abs(staggerCommand.MotorA) + sway, 0, 100);
+  staggerCommand.MotorB = constrain(abs(staggerCommand.MotorB) - sway, 0, 100);
+
+  // Preserve sign of original command
+  staggerCommand.MotorA = sgn(lastRawCommand.MotorA) * staggerCommand.MotorA;
+  staggerCommand.MotorB = sgn(lastRawCommand.MotorB) * staggerCommand.MotorB;
+
+
+
+  
+  return staggerCommand;
+}
 void loop() {
 
   //digitalWrite(LED_PIN,  (millis() >> 8 ) &1);
 
-  if(vibrationDetected) {
-    Serial.println("Vibration detected");
-    digitalWrite(LED_PIN, true);
-    delay(50);
-    digitalWrite(LED_PIN, false);
-    delay(10);
+  // if ((millis() >> 7 ) &1)
+  // {
+  //   Serial.print("Detected vibrations: ");
+  //   Serial.println(vibration_count);
+  // }
+  digitalWrite(LED_PIN,  scared);
 
+  if (scared)
+  {
+    if (millis() - scared_start > scared_timeout)
+    {
+      unscare();
+    }
+    else if(robotMoving)
+    {
+      move(stagger(), false);
+    }
+  }
+  if (vibrationDetected)
+  {
+    vibration_count++;
     vibrationDetected = false;
+  }
+  if(vibration_count > 10 && !scared) {
+    scare();
+    vibration_count = 0;
   }
 
   char key = keypad.getKey();
 
-  if (key) {
-    Serial.print("Key Pressed: ");
-    Serial.println(key);
+  if(key)
+  {
+    character_inputted = millis();
+    if (charIndex < 10){
+      charBuffer[charIndex++] = key;
+      charBuffer[charIndex] = '\0';
+      Serial.println(key);
+    }
+    else 
+    {
+      charBuffer[0] = '\0';
+      charIndex = 0;
+    }
+    if (charBuffer[0] == '#' && charIndex > 2 && charBuffer[charIndex - 1] == '*')
+    {
+      charBuffer[charIndex - 1] = '\0';  // remove the '*'
+      int value = atoi(&charBuffer[1]);   // parse digits between '#' and '*'
+      Serial.print("Parsed: ");
+      Serial.println(value);
+      scared_timeout = value * 1000;
+      charBuffer[0] = '\0';
+      charIndex = 0;
+    }
   }
 
+
+  if (character_inputted > 0 && millis() - character_inputted > 3000)
+  {
+    charBuffer[0] = '\0';
+    charIndex = 0;
+    Serial.println("Buffer reseted");
+    character_inputted = 0;
+  }
 
   int command = receiveCommand();
+  performCommand(command);
 
-  switch (command)
-  {
-    case FORWARD:
-    {
-      move(FULLSPEED, FULLSPEED);
-      break;
-    }
-    case BACWARD:
-    {
-      move(-FULLSPEED, -FULLSPEED);
-      break;
-    }
-    case TURN_LEFT:
-    {
-      move(FULLSPEED/2, -FULLSPEED/2);
-      break;
-    }
-    case TURN_RIGHT:
-    {
-      move(-FULLSPEED/2, FULLSPEED/2);
-      break;
-    }
-    case STOP:
-    {
-      move(0, 0);
-      break;
-    }
-    case STEER_RIGHT:
-    {
-      move(FULLSPEED - TURNSPEED, FULLSPEED );
-      break;
-    }
-    case STEER_LEFT:
-    {
-      move(FULLSPEED , FULLSPEED - TURNSPEED);
-      break;
-    }
-  }
 
   delay(10);
 }
