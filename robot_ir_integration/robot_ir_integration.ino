@@ -1,5 +1,6 @@
 #include <IRremote.h> // Library for handling IR signals
 #include <Keypad.h>
+#include <Adafruit_NeoPixel.h>
 
 #define sgn(x) ((x) < 0 ? -1 : ((x) > 0 ? 1 : 0)) // From: https://forum.arduino.cc/t/sgn-sign-signum-function-suggestions/602445
 
@@ -35,6 +36,13 @@ const unsigned long DEBOUNCE_DELAY = 250;
 
 #define IR_RECV_PIN 15
 #define LED_PIN 2
+#define LED_COUNT 8
+Adafruit_NeoPixel ring = Adafruit_NeoPixel(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+void fillRing(uint8_t r, uint8_t g, uint8_t b) {
+  for (int i = 0; i < LED_COUNT; i++) ring.setPixelColor(i, ring.Color(r, g, b));
+  ring.show();
+}
 // Movement command enums
 const int NO_COMMAND = 0;
 const int FORWARD = 1;
@@ -106,7 +114,9 @@ void setup() {
   pinMode(MOTOR_IN3, OUTPUT);
   pinMode(MOTOR_IN4, OUTPUT);
 
-  pinMode(LED_PIN, OUTPUT);
+  ring.begin();
+  ring.setBrightness(60);
+  fillRing(0, 255, 0);  // start "safe"
 
   IrReceiver.begin(IR_RECV_PIN, ENABLE_LED_FEEDBACK); // Start the receiver
 
@@ -393,10 +403,10 @@ void loop() {
   //   Serial.print("Detected vibrations: ");
   //   Serial.println(vibration_count);
   // }
-  digitalWrite(LED_PIN,  scared);
 
   if (scared)
   {
+    fillRing(255, 255, 255);
     if (millis() - scared_start > scared_timeout)
     {
       unscare();
@@ -405,6 +415,8 @@ void loop() {
     {
       move(stagger(), false);
     }
+  } else {
+    fillRing(0, 255, 0);
   }
   if (vibrationDetected)
   {
