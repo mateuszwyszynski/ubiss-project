@@ -1,9 +1,9 @@
 #include <IRremote.h> // Library for handling IR signals
 #include <Keypad.h>
 #include <Adafruit_NeoPixel.h>
-#include <DHT.h>
-#define DHT11_PIN  16 // ESP32 pin GPIO21 connected to DHT11 sensor
-DHT dht11(DHT11_PIN, DHT11);
+//#include <DHT.h>
+//#define DHT11_PIN  16 // ESP32 pin GPIO21 connected to DHT11 sensor
+//DHT dht11(DHT11_PIN, DHT11);
 
 
 #define sgn(x) ((x) < 0 ? -1 : ((x) > 0 ? 1 : 0)) // From: https://forum.arduino.cc/t/sgn-sign-signum-function-suggestions/602445
@@ -363,9 +363,11 @@ void scare()
 {
   scared = true;
   scared_start = millis();
+  Serial.print("Scare. Commnads: ");
   Serial.print(lastRawCommand.MotorA);
   Serial.print(" ");
-  Serial.print(lastRawCommand.MotorB);
+  Serial.println(lastRawCommand.MotorB);
+  fillRing(255, 255, 255);
   move(lastRawCommand, true);
 
   
@@ -376,7 +378,7 @@ void unscare()
   scared = false;
   scared_start = 0;
   vibration_count = 0;
-
+  fillRing(0, 255, 0);
   move(STOP_COMMAND, true);
 }
 MovementCommand stagger()
@@ -422,33 +424,33 @@ MovementCommand stagger()
 void loop() {
 
   //digitalWrite(LED_PIN,  (millis() >> 8 ) &1);
+  // static unsigned long lastPrintTime = 0;
+  // if(millis() - lastPrintTime > 1000)
+  // {
+  //   float humi  = dht11.readHumidity();
+  //   Serial.print("Humidity: ");
+  //   Serial.println(humi);
+  //   lastPrintTime = millis();
+  // }
+  //digitalWrite(LED_PIN,  scared);
 
   // if ((millis() >> 7 ) &1)
   // {
   //   Serial.print("Detected vibrations: ");
   //   Serial.println(vibration_count);
   // }
-  float humi  = dht11.readHumidity();
-  if (humi >= 60)
+  // float humi  = dht11.readHumidity();
+  // if (scared && humi >= 60)
+  // {
+  //   Serial.println(humi);
+  //   unscare();
+  // }
+  if (scared)
   {
-    unscare();
-  }
-  
-  if (scared && !previousScared)
-  {
-    fillRing(255, 255, 255);
-    // if (millis() - scared_start > scared_timeout)
-    // {
-    //   unscare();
-    // }
-    if(true)
+    if(robotMoving)
     {
       move(stagger(), false);
     }
-  }
-  else if (!scared && previousScared)
-  {
-    fillRing(0, 255, 0);
   }
 
   if (vibrationDetected)
@@ -457,6 +459,7 @@ void loop() {
     vibrationDetected = false;
     Serial.println("Vibration detected!");
   }
+
   if(vibration_count > vibariton_cont_for_scare && !scared) {
     scare();
     vibration_count = 0;
@@ -501,7 +504,8 @@ void loop() {
 
   int command = receiveCommand();
   performCommand(command);
+  delay(10);
 
   previousScared = scared;
-  delay(10);
+
 }
