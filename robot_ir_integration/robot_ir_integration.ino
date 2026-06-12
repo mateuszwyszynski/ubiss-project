@@ -1,6 +1,10 @@
 #include <IRremote.h> // Library for handling IR signals
 #include <Keypad.h>
 #include <Adafruit_NeoPixel.h>
+#include <DHT.h>
+#define DHT11_PIN  16 // ESP32 pin GPIO21 connected to DHT11 sensor
+DHT dht11(DHT11_PIN, DHT11);
+
 
 #define sgn(x) ((x) < 0 ? -1 : ((x) > 0 ? 1 : 0)) // From: https://forum.arduino.cc/t/sgn-sign-signum-function-suggestions/602445
 
@@ -32,6 +36,8 @@ volatile bool vibrationDetected = false;
 unsigned long lastTriggerTime = 0;
 const unsigned long DEBOUNCE_DELAY = 250;
 
+int vibariton_cont_for_scare = 10;
+
 
 
 #define IR_RECV_PIN 15
@@ -53,6 +59,7 @@ const int STEER_RIGHT = 6;
 const int STEER_LEFT = 7;
 const int STOP = 8;
 const int SCARE = 9;
+const int UNSCARE = 10;
 
 
 
@@ -78,13 +85,14 @@ float FREQUENCY = 0.008;
 int AMPLITUDE = 60;
 
 bool scared = false;
+bool previousScared = false;
 bool robotMoving = false;
 
 
 int last_movement_command = NO_COMMAND;
 
 unsigned int scared_start = 0;
-int scared_timeout = 10 * 1000;
+//int scared_timeout = 10 * 1000;
 
 MovementCommand lastRawCommand{0, 0};
 
@@ -188,6 +196,13 @@ int parseCommand() {
       return SCARE;
       break;
     }
+    case 0xBD42FF00:
+    {
+      Serial.println("Unscared");
+      return UNSCARE;
+      break;
+    }
+    
 
     
     default:
@@ -259,10 +274,15 @@ void performCommand(int command)
     case SCARE:
     {
       scare();
+      return;
     }
+    case UNSCARE:
+      unscare();
+      return;
     default:
       return;
   }
+  Serial.println("Movement_command");
   move(mov_command, true);
 }
 
@@ -343,7 +363,12 @@ void scare()
 {
   scared = true;
   scared_start = millis();
+  Serial.print(lastRawCommand.MotorA);
+  Serial.print(" ");
+  Serial.print(lastRawCommand.MotorB);
   move(lastRawCommand, true);
+
+  
 }
 
 void unscare()
@@ -403,27 +428,36 @@ void loop() {
   //   Serial.print("Detected vibrations: ");
   //   Serial.println(vibration_count);
   // }
-
-  if (scared)
+  float humi  = dht11.readHumidity();
+  if (humi >= 60)
+  {
+    unscare();
+  }
+  
+  if (scared && !previousScared)
   {
     fillRing(255, 255, 255);
-    if (millis() - scared_start > scared_timeout)
-    {
-      unscare();
-    }
-    else if(robotMoving)
+    // if (millis() - scared_start > scared_timeout)
+    // {
+    //   unscare();
+    // }
+    if(true)
     {
       move(stagger(), false);
     }
-  } else {
+  }
+  else if (!scared && previousScared)
+  {
     fillRing(0, 255, 0);
   }
+
   if (vibrationDetected)
   {
     vibration_count++;
     vibrationDetected = false;
+    Serial.println("Vibration detected!");
   }
-  if(vibration_count > 10 && !scared) {
+  if(vibration_count > vibariton_cont_for_scare && !scared) {
     scare();
     vibration_count = 0;
   }
@@ -449,7 +483,8 @@ void loop() {
       int value = atoi(&charBuffer[1]);   // parse digits between '#' and '*'
       Serial.print("Parsed: ");
       Serial.println(value);
-      scared_timeout = value * 1000;
+      //scared_timeout = value * 1000;
+      vibariton_cont_for_scare = value;
       charBuffer[0] = '\0';
       charIndex = 0;
     }
@@ -467,6 +502,6 @@ void loop() {
   int command = receiveCommand();
   performCommand(command);
 
-
+  previousScared = scared;
   delay(10);
 }
