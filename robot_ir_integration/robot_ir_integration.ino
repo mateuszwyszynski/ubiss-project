@@ -1,9 +1,9 @@
 #include <IRremote.h> // Library for handling IR signals
 #include <Keypad.h>
 #include <Adafruit_NeoPixel.h>
-//#include <DHT.h>
-//#define DHT11_PIN  16 // ESP32 pin GPIO21 connected to DHT11 sensor
-//DHT dht11(DHT11_PIN, DHT11);
+#include <DHT.h>
+#define DHT22_PIN  16 // ESP32 pin GPIO21 connected to dht22 sensor
+DHT dht22(DHT22_PIN, DHT22);
 
 
 #define sgn(x) ((x) < 0 ? -1 : ((x) > 0 ? 1 : 0)) // From: https://forum.arduino.cc/t/sgn-sign-signum-function-suggestions/602445
@@ -424,14 +424,18 @@ MovementCommand stagger()
 void loop() {
 
   //digitalWrite(LED_PIN,  (millis() >> 8 ) &1);
-  // static unsigned long lastPrintTime = 0;
-  // if(millis() - lastPrintTime > 1000)
-  // {
-  //   float humi  = dht11.readHumidity();
-  //   Serial.print("Humidity: ");
-  //   Serial.println(humi);
-  //   lastPrintTime = millis();
-  // }
+  static unsigned long lastPrintTime = 0;
+  if(millis() - lastPrintTime > 500)
+  {
+    float humi  = dht22.readHumidity();
+    Serial.print("Humidity: ");
+    Serial.println(humi);
+    if (scared && humi > 55)
+    {
+      unscare();
+    }
+    lastPrintTime = millis();
+  }
   //digitalWrite(LED_PIN,  scared);
 
   // if ((millis() >> 7 ) &1)
@@ -439,7 +443,7 @@ void loop() {
   //   Serial.print("Detected vibrations: ");
   //   Serial.println(vibration_count);
   // }
-  // float humi  = dht11.readHumidity();
+  // float humi  = dht22.readHumidity();
   // if (scared && humi >= 60)
   // {
   //   Serial.println(humi);
